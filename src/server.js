@@ -1,6 +1,9 @@
+// Backend
 import http from 'http';
 import WebSocket from 'ws';
 import express from 'express';
+import e from 'express';
+import { parse } from 'path';
 
 const app = express();
 
@@ -29,16 +32,43 @@ handleConnection : 이벤트가 발동했을 때 작동하는 함수
 wss.on('connection', handleConnection);
 */
 
+// 누가 접속한 건지 저장해 두었다가 모두에게 다시 메세지 전달하기 위함
+const sockets = [];
+
 // socket을 사용한다는 것을 좀 더 직관적으로 알아볼 수 있도록 익명함수 사용
 wss.on('connection', (socket) => {
-  console.log('connected to Browser ✅');
-  socket.on('close', () => {
-    console.log('Disconnected from the Browser ❌');
+  // 접속한 소켓 sockets 배열에 추가하기
+  sockets.push(socket);
+  socket['nickname'] = 'Anon';
+  console.log('connected to Browser ✅'); // 2
+  console.log(sockets.length);
+
+  // 브라우저에서 보낸 메세지 받기 (그대로 받을 경우 디코딩 필요)
+  socket.on('message', (msg, isBinary) => {
+    // 7
+    const decodedMessage = isBinary ? msg : msg.toString();
+    const parsedMessage = JSON.parse(decodedMessage);
+    switch (parsedMessage.type) {
+      case 'new_message':
+        sockets.forEach((aSocket) => {
+          return aSocket.send(`${socket.nickname}: ${parsedMessage.payload}`);
+        });
+      case 'nickname':
+        console.log(parsedMessage.payload);
+        socket['nickname'] = parsedMessage.payload;
+    }
   });
 
-  // 메세지 보내기 : socket에 있는 method
-  // connection 이 생겼을 때 socket으로 즉시 메세지를 보낸 것!
-  socket.send('hello!!!');
+  // 브라우저에서 연결이 끊어졌을 때 close 이벤트 발동
+  socket.on('close', (socket) => {
+    const index = sockets.indexOf(socket);
+    console.log('Disconnected from the Browser ❌');
+    sockets.splice(index, 1);
+    console.log(sockets.length);
+  });
 });
 
 server.listen(3000, handleListen);
+
+// 메세지 보내기 : socket.send()  : socekt 에 있는 method
+// sockets.forEach((aSocket) => aSocket.send(parsedMessage.payload));
